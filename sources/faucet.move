@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2025 Bima Kharisma Wicaksana
- * GitHub: https://github.com/bimakw
- *
- * Licensed under MIT License with Attribution Requirement.
- * See LICENSE file for details.
- */
-
-/// Token Faucet - A controlled token dispenser with rate limiting.
-/// Useful for testnet token distribution.
 module sui_token::faucet {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::tx_context::{Self, TxContext};
@@ -18,15 +8,12 @@ module sui_token::faucet {
     use sui::balance::{Self, Balance};
     use sui::event;
 
-    /// One-Time-Witness for faucet token
     public struct FAUCET has drop {}
 
-    /// Error codes
     const ECooldownNotPassed: u64 = 0;
     const EFaucetEmpty: u64 = 1;
     const EAmountExceedsMax: u64 = 2;
 
-    /// Faucet configuration and state
     public struct Faucet has key {
         id: UID,
         balance: Balance<FAUCET>,
@@ -35,7 +22,6 @@ module sui_token::faucet {
         last_claim: Table<address, u64>,
     }
 
-    /// Events
     public struct TokensClaimed has copy, drop {
         claimer: address,
         amount: u64,
@@ -47,7 +33,6 @@ module sui_token::faucet {
         amount: u64,
     }
 
-    /// Initialize faucet token and faucet
     fun init(witness: FAUCET, ctx: &mut TxContext) {
         let (treasury_cap, metadata) = coin::create_currency(
             witness,
@@ -59,7 +44,6 @@ module sui_token::faucet {
             ctx
         );
 
-        // Create faucet with default settings
         let faucet = Faucet {
             id: object::new(ctx),
             balance: balance::zero(),
@@ -73,7 +57,6 @@ module sui_token::faucet {
         transfer::share_object(faucet);
     }
 
-    /// Fund the faucet with tokens
     public entry fun fund_faucet(
         faucet: &mut Faucet,
         coin: Coin<FAUCET>,
@@ -88,7 +71,6 @@ module sui_token::faucet {
         });
     }
 
-    /// Claim tokens from faucet
     public entry fun claim(
         faucet: &mut Faucet,
         clock: &Clock,
@@ -97,24 +79,20 @@ module sui_token::faucet {
         let sender = tx_context::sender(ctx);
         let current_time = clock::timestamp_ms(clock);
 
-        // Check cooldown
         if (table::contains(&faucet.last_claim, sender)) {
             let last = *table::borrow(&faucet.last_claim, sender);
             assert!(current_time >= last + faucet.cooldown_ms, ECooldownNotPassed);
         };
 
-        // Check balance
         let available = balance::value(&faucet.balance);
         assert!(available >= faucet.drip_amount, EFaucetEmpty);
 
-        // Update last claim time
         if (table::contains(&faucet.last_claim, sender)) {
             *table::borrow_mut(&mut faucet.last_claim, sender) = current_time;
         } else {
             table::add(&mut faucet.last_claim, sender, current_time);
         };
 
-        // Dispense tokens
         let coin = coin::from_balance(
             balance::split(&mut faucet.balance, faucet.drip_amount),
             ctx
@@ -129,7 +107,6 @@ module sui_token::faucet {
         transfer::public_transfer(coin, sender);
     }
 
-    /// Check if address can claim (cooldown passed)
     public fun can_claim(faucet: &Faucet, addr: address, clock: &Clock): bool {
         if (!table::contains(&faucet.last_claim, addr)) {
             return true
@@ -140,7 +117,6 @@ module sui_token::faucet {
         current >= last + faucet.cooldown_ms
     }
 
-    /// Get time until next claim (in milliseconds)
     public fun time_until_claim(faucet: &Faucet, addr: address, clock: &Clock): u64 {
         if (!table::contains(&faucet.last_claim, addr)) {
             return 0
@@ -157,7 +133,6 @@ module sui_token::faucet {
         }
     }
 
-    /// View functions
     public fun drip_amount(faucet: &Faucet): u64 { faucet.drip_amount }
     public fun cooldown_ms(faucet: &Faucet): u64 { faucet.cooldown_ms }
     public fun faucet_balance(faucet: &Faucet): u64 { balance::value(&faucet.balance) }
